@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>asterisknautz.vvv</title>
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="three-canvas"></canvas>
+      <header class="site-brand">
+        <h1>asterisknautz.<span>vvv</span></h1>
+        <div id="route-indicator">/</div>
+      </header>
+
+      <nav class="ui">
+        <a href="/" data-link>Home</a>
+        <a href="/001" data-link>001</a>
+        <a href="/002" data-link>002</a>
+      </nav>
+
+      <footer class="hint">
+        click: drop ripple • drag: orbit • dblclick: reset
+      </footer>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

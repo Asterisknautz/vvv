@@ -1,0 +1,38 @@
+:root{
+  --bg:#191925;
+  --fg:#e6e6f6;
+  --sub:#9aa3ff;
+}
+*{ box-sizing:border-box; }
+html,body,#app{ height:100%; margin:0; }
+body{ background:var(--bg); color:var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans JP, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+#three-canvas{
+  position:fixed; inset:0; width:100%; height:100%; display:block;
+}
+
+.site-brand{
+  position:fixed; top:24px; left:24px; line-height:1;
+  mix-blend-mode:screen; user-select:none; pointer-events:none;
+}
+.site-brand h1{
+  margin:0; font-weight:800; letter-spacing:0.5px; font-size: clamp(20px, 2.8vw, 40px);
+}
+.site-brand h1 span{ color:var(--sub); }
+#route-indicator{
+  margin-top:6px; opacity:.7; font-size:12px; letter-spacing:1.5px;
+}
+
+.ui{
+  position:fixed; top:24px; right:24px; display:flex; gap:12px;
+  background:rgba(255,255,255,.05); backdrop-filter: blur(6px);
+  padding:8px 10px; border-radius:10px;
+}
+.ui a{
+  color:var(--fg); text-decoration:none; opacity:.8;
+}
+.ui a:hover{ opacity:1; text-decoration:underline; }
+
+.hint{
+  position:fixed; bottom:16px; left:50%; transform:translateX(-50%);
+  font-size:12px; opacity:.6; background:rgba(0,0,0,.25); padding:6px 10px; border-radius:8px;
+}
