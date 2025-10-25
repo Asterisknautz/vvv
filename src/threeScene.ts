@@ -48,12 +48,7 @@ export class ThreeApp {
     this.floor = new THREE.Mesh(floorGeo, floorMat);
     this.scene.add(this.floor);
 
-    const ico = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(0.8, 1),
-      new THREE.MeshStandardMaterial({ color: 0x9aa3ff, metalness: 0.4, roughness: 0.3 })
-    );
-    ico.position.y = 1;
-    this.scene.add(ico);
+    this.initSolarSystem();
 
     this.scene.add(this.root);
 
@@ -83,29 +78,41 @@ export class ThreeApp {
     this.raycaster.setFromCamera(this.pointer, this.camera);
     const hit = this.raycaster.intersectObject(this.floor)[0];
     if (hit) this.spawnRipple(hit.point);
+    this.triggerPixelShift();
   }
 
   spawnRipple(point: THREE.Vector3) {
-    const geo = new THREE.TorusGeometry(0.01, 0.005, 8, 48);
-    const mat = new THREE.MeshBasicMaterial({ color: 0x9aa3ff, transparent: true, opacity: 0.9 });
-    const ring = new THREE.Mesh(geo, mat);
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.copy(point);
-    this.scene.add(ring);
+    const rings = Array.from({ length: 3 }).map((_, idx) => {
+      const geo = new THREE.TorusGeometry(0.1 + idx * 0.04, 0.004, 12, 64);
+      const mat = new THREE.MeshBasicMaterial({ color: 0x9aa3ff, transparent: true, opacity: 0.85 - idx * 0.2 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.copy(point);
+      mesh.scale.setScalar(0.2);
+      this.scene.add(mesh);
+      return mesh;
+    });
 
     const start = this.clock.getElapsedTime();
-    const maxR = 1.5;
-    const duration = 1.2;
+    const maxR = 2.4 + Math.random() * 1.6;
+    const duration = 1.6;
 
     const update = () => {
       const t = this.clock.getElapsedTime() - start;
       const k = Math.min(1, t / duration);
-      ring.scale.setScalar(0.1 + k * (maxR / 0.1));
-      (ring.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - k);
+      const easing = 1 - Math.pow(1 - k, 3);
+      const pulsate = 1 + Math.sin(k * Math.PI * 2.5) * 0.05 * (1 - k);
+      rings.forEach((ring, idx) => {
+        const spread = maxR * (1 + idx * 0.12);
+        ring.scale.setScalar(0.2 + easing * (spread / 0.2) * pulsate);
+        (ring.material as THREE.MeshBasicMaterial).opacity = (0.85 - idx * 0.2) * (1 - k);
+      });
       if (k >= 1) {
-        this.scene.remove(ring);
-        ring.geometry.dispose();
-        (ring.material as THREE.Material).dispose();
+        rings.forEach((ring) => {
+          this.scene.remove(ring);
+          ring.geometry.dispose();
+          (ring.material as THREE.Material).dispose();
+        });
         this.updates.delete(update);
       }
     };
@@ -113,6 +120,109 @@ export class ThreeApp {
   }
 
   updates = new Set<() => void>();
+
+  glitchTimeout: number | null = null;
+
+  triggerPixelShift() {
+    const canvas = this.renderer.domElement;
+    const offsetX = (Math.random() - 0.5) * 18;
+    const offsetY = (Math.random() - 0.5) * 12;
+    const skew = (Math.random() - 0.5) * 2.4;
+    canvas.style.setProperty("--glitch-translate-x", `${offsetX}px`);
+    canvas.style.setProperty("--glitch-translate-y", `${offsetY}px`);
+    canvas.style.setProperty("--glitch-skew", `${skew}deg`);
+    canvas.classList.add("glitching");
+
+    const overlay = document.createElement("div");
+    overlay.className = "pixel-shift";
+    overlay.style.setProperty("--shift-x", `${(Math.random() - 0.5) * 24}px`);
+    overlay.style.setProperty("--shift-y", `${(Math.random() - 0.5) * 18}px`);
+    overlay.style.setProperty("--shift-hue", `${Math.floor(Math.random() * 30) - 15}deg`);
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add("animate"));
+    window.setTimeout(() => overlay.remove(), 240);
+
+    if (this.glitchTimeout) window.clearTimeout(this.glitchTimeout);
+    this.glitchTimeout = window.setTimeout(() => {
+      canvas.classList.remove("glitching");
+    }, 180);
+  }
+
+  initSolarSystem() {
+    const solarRoot = new THREE.Group();
+    solarRoot.position.y = 1;
+    this.scene.add(solarRoot);
+
+    const sun = new THREE.Mesh(
+      new THREE.SphereGeometry(0.6, 32, 32),
+      new THREE.MeshStandardMaterial({ color: 0xffd27f, emissive: 0xffa733, emissiveIntensity: 1.8, roughness: 0.3 })
+    );
+    solarRoot.add(sun);
+
+    const glow = new THREE.Mesh(
+      new THREE.SphereGeometry(0.85, 24, 24),
+      new THREE.MeshBasicMaterial({ color: 0xffe5a1, transparent: true, opacity: 0.2 })
+    );
+    solarRoot.add(glow);
+
+    const planetConfigs = [
+      { distance: 1.1, size: 0.08, color: 0xb7b5ff, orbitSpeed: 1.2, selfSpeed: 0.6 },
+      { distance: 1.5, size: 0.1, color: 0x74cfff, orbitSpeed: 0.9, selfSpeed: 0.4 },
+      { distance: 1.9, size: 0.11, color: 0xffa66f, orbitSpeed: 0.7, selfSpeed: 0.3 },
+      { distance: 2.5, size: 0.16, color: 0xfff2a6, orbitSpeed: 0.5, selfSpeed: 0.35, ring: true },
+      { distance: 3.1, size: 0.14, color: 0xa8b4ff, orbitSpeed: 0.32, selfSpeed: 0.25 },
+      { distance: 3.8, size: 0.12, color: 0x9ee6ff, orbitSpeed: 0.22, selfSpeed: 0.2 },
+      { distance: 4.4, size: 0.11, color: 0x7fa7ff, orbitSpeed: 0.18, selfSpeed: 0.18 },
+      { distance: 5.2, size: 0.1, color: 0xe0e8ff, orbitSpeed: 0.12, selfSpeed: 0.16 },
+    ];
+
+    const orbiters: { group: THREE.Group; planet: THREE.Mesh; selfSpeed: number; orbitSpeed: number }[] = [];
+
+    planetConfigs.forEach((config, index) => {
+      const orbit = new THREE.Group();
+      solarRoot.add(orbit);
+
+      const orbitPath = new THREE.LineLoop(
+        new THREE.BufferGeometry().setFromPoints(
+          new THREE.EllipseCurve(0, 0, config.distance, config.distance)
+            .getPoints(90)
+            .map((p) => new THREE.Vector3(p.x, 0, p.y))
+        ),
+        new THREE.LineBasicMaterial({ color: 0x2a2a40, transparent: true, opacity: 0.6 })
+      );
+      orbitPath.rotation.x = Math.PI / 2;
+      solarRoot.add(orbitPath);
+
+      const planet = new THREE.Mesh(
+        new THREE.SphereGeometry(config.size, 24, 24),
+        new THREE.MeshStandardMaterial({ color: config.color, roughness: 0.5, metalness: 0.1 })
+      );
+      planet.position.x = config.distance;
+      orbit.add(planet);
+
+      if (config.ring) {
+        const ring = new THREE.Mesh(
+          new THREE.TorusGeometry(config.size * 1.7, config.size * 0.3, 2, 48),
+          new THREE.MeshStandardMaterial({ color: 0xd9d3a1, transparent: true, opacity: 0.6 })
+        );
+        ring.rotation.x = Math.PI / 3;
+        planet.add(ring);
+      }
+
+      planet.rotation.x = 0.3 + index * 0.05;
+      orbit.rotation.x = 0.05 * index;
+      orbiters.push({ group: orbit, planet, selfSpeed: config.selfSpeed, orbitSpeed: config.orbitSpeed });
+    });
+
+    const updatePlanets = () => {
+      const elapsed = this.clock.getElapsedTime();
+      orbiters.forEach(({ group, planet, selfSpeed, orbitSpeed }) => {
+        group.rotation.y = elapsed * orbitSpeed;
+        planet.rotation.y += 0.01 * selfSpeed;
+      });
+    };
+    this.updates.add(updatePlanets);
+  }
 
   animate = () => {
     requestAnimationFrame(this.animate);

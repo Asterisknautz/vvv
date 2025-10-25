@@ -8,6 +8,41 @@ html,body,#app{ height:100%; margin:0; }
 body{ background:var(--bg); color:var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans JP, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
 #three-canvas{
   position:fixed; inset:0; width:100%; height:100%; display:block;
+  transition: transform .18s ease, filter .18s ease;
+  will-change: transform, filter;
+}
+
+#three-canvas.glitching{
+  transform: translate(var(--glitch-translate-x, 0px), var(--glitch-translate-y, 0px)) skewX(var(--glitch-skew, 0deg));
+  filter: saturate(1.2) contrast(1.08);
+}
+
+.pixel-shift{
+  position:fixed; inset:0; pointer-events:none;
+  mix-blend-mode:screen;
+  background:repeating-linear-gradient(0deg, rgba(154,163,255,.22) 0 2px, transparent 2px 4px);
+  opacity:0;
+}
+
+.pixel-shift.animate{
+  animation:pixelShift .22s ease-out forwards;
+}
+
+@keyframes pixelShift{
+  0%{
+    opacity:.42;
+    transform:translate(var(--shift-x, 0px), var(--shift-y, 0px));
+    filter:hue-rotate(var(--shift-hue, 0deg)) saturate(1.5);
+  }
+  60%{
+    opacity:.2;
+    transform:translate(calc(var(--shift-x, 0px) * -.25), calc(var(--shift-y, 0px) * -.25));
+  }
+  100%{
+    opacity:0;
+    transform:translate(0,0);
+    filter:hue-rotate(0deg) saturate(1);
+  }
 }
 
 .site-brand{
