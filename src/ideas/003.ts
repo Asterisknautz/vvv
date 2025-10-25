@@ -13,8 +13,11 @@ type Fish = {
   group: THREE.Group;
   body: THREE.Mesh;
   tail: THREE.Mesh;
+  dorsal: THREE.Mesh;
+  pectoralLeft: THREE.Mesh;
+  pectoralRight: THREE.Mesh;
   bodyMaterial: THREE.MeshStandardMaterial;
-  tailMaterial: THREE.MeshStandardMaterial;
+  finMaterial: THREE.MeshStandardMaterial;
   radius: number;
   baseHeight: number;
   sway: number;
@@ -202,42 +205,73 @@ export default function idea003({ scene, camera, renderer, root, clock, solarSys
   fishGroup.position.y = 0.6;
   ideaRoot.add(fishGroup);
 
-  const fishBodyGeometry = registerGeometry(new THREE.CapsuleGeometry(0.18, 0.48, 6, 16));
-  const fishTailGeometry = registerGeometry(new THREE.PlaneGeometry(0.32, 0.42, 1, 6));
+  const fishBodyGeometry = registerGeometry(new THREE.CapsuleGeometry(0.16, 0.46, 1, 6));
+  fishBodyGeometry.scale(1, 0.8, 0.72);
+  fishBodyGeometry.translate(-0.05, 0, 0);
+
+  const fishTailGeometry = registerGeometry(new THREE.PlaneGeometry(0.32, 0.38, 1, 2));
   fishTailGeometry.translate(-0.16, 0, 0);
 
+  const fishDorsalGeometry = registerGeometry(new THREE.PlaneGeometry(0.22, 0.16, 1, 1));
+  fishDorsalGeometry.translate(-0.02, 0.08, 0);
+  fishDorsalGeometry.rotateY(Math.PI / 2);
+
+  const fishPectoralGeometry = registerGeometry(new THREE.PlaneGeometry(0.22, 0.14, 1, 1));
+  fishPectoralGeometry.translate(-0.06, 0, 0);
+  fishPectoralGeometry.rotateY(Math.PI / 2);
+
   const fishes: Fish[] = [];
-  const fishColors = [0x7f8cff, 0x9eb4ff, 0x6b7bdc];
-  for (let i = 0; i < 3; i++) {
+  const fishColors = [0x7f8cff, 0x9eb4ff, 0x6b7bdc, 0x98f1ff, 0x7cd6ff];
+  const fishCount = 14;
+  for (let i = 0; i < fishCount; i++) {
     const group = new THREE.Group();
-    group.scale.setScalar(1 - i * 0.12);
+    group.scale.setScalar(THREE.MathUtils.lerp(0.55, 1.35, Math.random()));
 
     const bodyMaterial = registerMaterial(
       new THREE.MeshStandardMaterial({
         color: fishColors[i % fishColors.length],
-        roughness: 0.25,
-        metalness: 0.15,
-        emissive: new THREE.Color(0x1a1f36),
-        emissiveIntensity: 0.35,
+        roughness: 0.32,
+        metalness: 0.05,
+        emissive: new THREE.Color(0x3a4bff),
+        emissiveIntensity: 1.35,
+        flatShading: true,
       })
     ) as THREE.MeshStandardMaterial;
     const body = new THREE.Mesh(fishBodyGeometry, bodyMaterial);
 
-    const tailMaterial = registerMaterial(
+    const finMaterial = registerMaterial(
       new THREE.MeshStandardMaterial({
         color: fishColors[(i + 1) % fishColors.length],
-        roughness: 0.45,
-        metalness: 0.1,
+        roughness: 0.6,
+        metalness: 0.05,
         side: THREE.DoubleSide,
         transparent: true,
-        opacity: 0.75,
+        opacity: 0.85,
+        emissive: new THREE.Color(0x4c5cff),
+        emissiveIntensity: 1.6,
+        flatShading: true,
       })
     ) as THREE.MeshStandardMaterial;
-    const tail = new THREE.Mesh(fishTailGeometry, tailMaterial);
+    const tail = new THREE.Mesh(fishTailGeometry, finMaterial);
     tail.position.set(-0.24, 0, 0);
     tail.rotation.y = Math.PI / 2;
 
+    const dorsal = new THREE.Mesh(fishDorsalGeometry, finMaterial);
+    dorsal.position.set(-0.02, 0.16, 0);
+    dorsal.rotation.x = Math.PI / 2;
+
+    const pectoralLeft = new THREE.Mesh(fishPectoralGeometry, finMaterial);
+    pectoralLeft.position.set(0.02, -0.04, 0.11);
+    pectoralLeft.rotation.set(0, Math.PI / 2, Math.PI / 3);
+
+    const pectoralRight = new THREE.Mesh(fishPectoralGeometry, finMaterial);
+    pectoralRight.position.set(0.02, -0.04, -0.11);
+    pectoralRight.rotation.set(0, Math.PI / 2, -Math.PI / 3);
+
     body.add(tail);
+    body.add(dorsal);
+    body.add(pectoralLeft);
+    body.add(pectoralRight);
     group.add(body);
     fishGroup.add(group);
 
@@ -245,14 +279,17 @@ export default function idea003({ scene, camera, renderer, root, clock, solarSys
       group,
       body,
       tail,
+      dorsal,
+      pectoralLeft,
+      pectoralRight,
       bodyMaterial,
-      tailMaterial,
-      radius: 1.6 + i * 0.4,
-      baseHeight: 0.2 + i * 0.18,
-      sway: 0.32 + i * 0.08,
-      speed: 0.22 + i * 0.05,
+      finMaterial,
+      radius: 1.2 + Math.random() * 2.4,
+      baseHeight: -0.1 + Math.random() * 1.1,
+      sway: 0.28 + Math.random() * 0.24,
+      speed: 0.16 + Math.random() * 0.22,
       offset: Math.random() * Math.PI * 2,
-      roll: (Math.random() - 0.5) * 0.2,
+      roll: (Math.random() - 0.5) * 0.4,
     });
   }
 
@@ -438,8 +475,8 @@ export default function idea003({ scene, camera, renderer, root, clock, solarSys
   const updateWireframe = (enabled: boolean) => {
     fishes.forEach((fish) => {
       fish.bodyMaterial.wireframe = enabled;
-      fish.tailMaterial.wireframe = enabled;
-      fish.tailMaterial.opacity = enabled ? 1 : 0.75;
+      fish.finMaterial.wireframe = enabled;
+      fish.finMaterial.opacity = enabled ? 1 : 0.85;
     });
   };
 
@@ -513,10 +550,21 @@ export default function idea003({ scene, camera, renderer, root, clock, solarSys
 
       const tailSwing = Math.sin(elapsed * 4.2 + fish.offset * 1.5) * (0.5 + fish.sway * 0.4);
       fish.tail.rotation.y = Math.PI / 2 + tailSwing * 0.6;
+      fish.body.rotation.y = tailSwing * 0.12;
 
       const breath = 1 + Math.sin(elapsed * 1.6 + fish.offset) * 0.04;
       fish.body.scale.z = breath;
       fish.body.scale.y = 1 + Math.sin(elapsed * 1.1 + fish.offset) * 0.02;
+
+      const dorsalWave = Math.sin(elapsed * 3.1 + fish.offset * 1.2) * 0.3;
+      fish.dorsal.rotation.z = dorsalWave * 0.35;
+
+      const finFlutter = Math.sin(elapsed * 5.4 + fish.offset * 1.6) * (0.6 + fish.sway * 0.3);
+      fish.pectoralLeft.rotation.set(0, Math.PI / 2 + Math.sin(elapsed * 2.2 + fish.offset) * 0.14, Math.PI / 3 + finFlutter * 0.35);
+      fish.pectoralRight.rotation.set(0, Math.PI / 2 - Math.sin(elapsed * 2.2 + fish.offset) * 0.14, -Math.PI / 3 - finFlutter * 0.35);
+
+      const glide = Math.sin(elapsed * 0.8 + fish.offset * 0.6) * 0.04;
+      fish.body.rotation.x = glide;
 
       const tilt = Math.cos(elapsed * 0.9 + fish.offset) * 0.08;
       fish.group.rotation.x += (tilt - fish.group.rotation.x) * 0.1;
