@@ -147,7 +147,7 @@ const causticsShader = {
   `,
 };
 
-export default function idea003({ scene, camera, renderer, root, clock }: SceneContext) {
+export default function idea003({ scene, camera, renderer, root, clock, solarSystem }: SceneContext) {
   const ideaRoot = new THREE.Group();
   root.add(ideaRoot);
 
@@ -186,6 +186,11 @@ export default function idea003({ scene, camera, renderer, root, clock }: SceneC
       obj.visible = false;
     }
   });
+
+  const previousSolarVisibility = solarSystem ? solarSystem.visible : null;
+  if (solarSystem) {
+    solarSystem.visible = false;
+  }
 
   const hemi = new THREE.HemisphereLight(0x9aa3ff, 0x191925, 0.6);
   const dir = new THREE.DirectionalLight(0xb5c3ff, 0.38);
@@ -537,6 +542,10 @@ export default function idea003({ scene, camera, renderer, root, clock }: SceneC
     previousLights.forEach(({ light, visible }) => {
       light.visible = visible;
     });
+
+    if (solarSystem && previousSolarVisibility !== null) {
+      solarSystem.visible = previousSolarVisibility;
+    }
 
     composer.dispose();
     refractionPass.material.dispose();

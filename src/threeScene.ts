@@ -10,6 +10,7 @@ export interface SceneContext {
   renderer: THREE.WebGLRenderer;
   root: THREE.Group; // idea をぶら下げる
   clock: THREE.Clock;
+  solarSystem: THREE.Group | null;
 }
 
 type SceneTransition = (options: TransitionOptions) => Promise<void>;
@@ -36,6 +37,7 @@ export class ThreeApp {
   root = new THREE.Group();
   clock = new THREE.Clock();
   cleanupIdea: (() => void) | null = null;
+  solarSystemRoot: THREE.Group | null = null;
   private fadeOverlay: HTMLElement | null = null;
   private fadeDurationMs = 450;
   private currentIdeaId: string | null = null;
@@ -318,6 +320,7 @@ export class ThreeApp {
 
   initSolarSystem() {
     const solarRoot = new THREE.Group();
+    this.solarSystemRoot = solarRoot;
     solarRoot.position.y = 1;
     this.scene.add(solarRoot);
 
@@ -456,6 +459,7 @@ export class ThreeApp {
           renderer: this.renderer,
           root: this.root,
           clock: this.clock,
+          solarSystem: this.solarSystemRoot,
         });
         if (typeof maybeCleanup === "function") this.cleanupIdea = maybeCleanup;
         this.currentIdeaId = id;
