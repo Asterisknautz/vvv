@@ -19,6 +19,11 @@ type Bird = {
 };
 
 const MODE_ORDER: Mode[] = ["cinematic", "wireframe", "depth"];
+const BLOOM_STRENGTHS: Record<Mode, number> = {
+  cinematic: 1.4,
+  wireframe: 0.3,
+  depth: 0,
+};
 
 export default function idea002({ scene, camera, renderer, root, clock }: SceneContext) {
   const ideaRoot = new THREE.Group();
@@ -54,12 +59,11 @@ export default function idea002({ scene, camera, renderer, root, clock }: SceneC
   renderer.toneMappingExposure = 1.35;
 
   const composer = new EffectComposer(renderer);
-  composer.setSize(innerWidth, innerHeight);
 
   const renderPass = new RenderPass(scene, camera);
   const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 1.2, 0.9, 0.85);
   bloomPass.threshold = 0.42;
-  bloomPass.strength = 1.4;
+  bloomPass.strength = BLOOM_STRENGTHS.cinematic;
   bloomPass.radius = 0.65;
 
   const filmPass = new FilmPass(0.65, false);
@@ -72,6 +76,23 @@ export default function idea002({ scene, camera, renderer, root, clock }: SceneC
   composer.addPass(bloomPass);
   composer.addPass(colorPass);
   composer.addPass(filmPass);
+
+  const drawingBufferSize = new THREE.Vector2();
+  renderer.getDrawingBufferSize(drawingBufferSize);
+  composer.setSize(drawingBufferSize.x, drawingBufferSize.y);
+  bloomPass.setSize(drawingBufferSize.x, drawingBufferSize.y);
+  let composerWidth = drawingBufferSize.x;
+  let composerHeight = drawingBufferSize.y;
+
+  const syncComposerSize = () => {
+    renderer.getDrawingBufferSize(drawingBufferSize);
+    if (drawingBufferSize.x !== composerWidth || drawingBufferSize.y !== composerHeight) {
+      composerWidth = drawingBufferSize.x;
+      composerHeight = drawingBufferSize.y;
+      composer.setSize(composerWidth, composerHeight);
+      bloomPass.setSize(composerWidth, composerHeight);
+    }
+  };
 
   const depthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   depthMaterial.blending = THREE.NoBlending;
@@ -89,19 +110,21 @@ export default function idea002({ scene, camera, renderer, root, clock }: SceneC
   const setMode = (mode: Mode) => {
     updateWireframe(false);
     scene.overrideMaterial = originalOverrideMaterial;
-    bloomPass.enabled = true;
     filmPass.enabled = true;
     colorPass.enabled = true;
 
     switch (mode) {
       case "cinematic": {
         renderer.toneMappingExposure = 1.35;
+        bloomPass.strength = BLOOM_STRENGTHS.cinematic;
+        bloomPass.enabled = BLOOM_STRENGTHS.cinematic > 0;
         break;
       }
       case "wireframe": {
         updateWireframe(true);
         renderer.toneMappingExposure = 1.1;
-        bloomPass.enabled = false;
+        bloomPass.strength = BLOOM_STRENGTHS.wireframe;
+        bloomPass.enabled = BLOOM_STRENGTHS.wireframe > 0;
         filmPass.enabled = false;
         colorPass.enabled = false;
         break;
@@ -109,6 +132,7 @@ export default function idea002({ scene, camera, renderer, root, clock }: SceneC
       case "depth": {
         renderer.toneMappingExposure = 1.0;
         scene.overrideMaterial = depthMaterial;
+        bloomPass.strength = BLOOM_STRENGTHS.depth;
         bloomPass.enabled = false;
         filmPass.enabled = false;
         colorPass.enabled = false;
@@ -120,8 +144,8 @@ export default function idea002({ scene, camera, renderer, root, clock }: SceneC
   setMode(MODE_ORDER[modeIndex]);
 
   const onResize = () => {
-    composer.setSize(innerWidth, innerHeight);
-    bloomPass.setSize(innerWidth, innerHeight);
+    composerWidth = -1;
+    composerHeight = -1;
   };
   window.addEventListener("resize", onResize);
 
@@ -303,6 +327,7 @@ export default function idea002({ scene, camera, renderer, root, clock }: SceneC
     const now = performance.now();
     const delta = (now - previousTime) / 1000;
     previousTime = now;
+    syncComposerSize();
     updateBirds(delta);
     updateEmbers();
     rafId = requestAnimationFrame(loop);

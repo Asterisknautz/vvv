@@ -148,9 +148,9 @@ bubbles:
   layers:
     - id: "near"
       count:
-        high: 1800
-        medium: 1200
-        low: 700
+        high: 2160
+        medium: 1440
+        low: 840
       spawn_region:
         radius_xz: 1.2
         y_range: [-1.3, -0.5]
@@ -165,9 +165,9 @@ bubbles:
       depth_fade: 0.6
     - id: "far"
       count:
-        high: 1400
-        medium: 900
-        low: 480
+        high: 1680
+        medium: 1080
+        low: 576
       spawn_region:
         radius_xz: 1.7
         y_range: [-1.5, -0.8]
@@ -195,7 +195,7 @@ modes:
   wire:
     wireframe: true
     refraction: 0.0
-    bloom_scale: 0.4
+    bloom_scale: 0.3
     monotone_strength: 0.2
   shader:
     wireframe: false
@@ -206,7 +206,7 @@ modes:
     wireframe: false
     refraction: "-0.0015"
     bloom_scale: 0.8
-    monotone_strength: 0.95
+    monotone_strength: 0.9
     monochrome_mode: "blue-gray"
 
 interactions:
@@ -222,7 +222,7 @@ interactions:
       type: "timescale"
       value: 0.35
       easing: "quintOut"
-      blend_ms: 220
+      blend_ms: 300
   gestures:
     pinch_zoom: true
     two_finger_pan: false

@@ -42,6 +42,9 @@ export class ThreeApp {
   private transitionStage: HTMLDivElement | null = null;
   private transitions: SceneTransition[] = [];
   private lightweightTransitions: SceneTransition[] = [];
+  private rendererSize = new THREE.Vector2();
+  private resizeTarget = new THREE.Vector2();
+  private pendingPixelRatio = 1;
 
   constructor(canvas: HTMLCanvasElement) {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -49,6 +52,9 @@ export class ThreeApp {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(innerWidth, innerHeight);
+    this.renderer.getSize(this.rendererSize);
+    this.resizeTarget.copy(this.rendererSize);
+    this.pendingPixelRatio = dpr;
 
     this.camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 100);
     this.camera.position.set(4, 3, 6);
@@ -97,9 +103,52 @@ export class ThreeApp {
   }
 
   onResize() {
-    this.camera.aspect = innerWidth / innerHeight;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(innerWidth, innerHeight);
+    const width = Math.max(1, innerWidth);
+    const height = Math.max(1, innerHeight);
+    this.resizeTarget.set(width, height);
+    this.pendingPixelRatio = Math.min(2, window.devicePixelRatio || 1);
+  }
+
+  private applyPendingResize() {
+    const targetWidth = Math.max(1, this.resizeTarget.x);
+    const targetHeight = Math.max(1, this.resizeTarget.y);
+
+    if (Math.abs(this.renderer.getPixelRatio() - this.pendingPixelRatio) > 0.01) {
+      this.renderer.setPixelRatio(this.pendingPixelRatio);
+    }
+
+    const widthDiff = targetWidth - this.rendererSize.x;
+    const heightDiff = targetHeight - this.rendererSize.y;
+    const closeEnough = Math.abs(widthDiff) < 0.5 && Math.abs(heightDiff) < 0.5;
+
+    if (closeEnough) {
+      if (this.rendererSize.x !== targetWidth || this.rendererSize.y !== targetHeight) {
+        this.renderer.setSize(targetWidth, targetHeight);
+        this.rendererSize.set(targetWidth, targetHeight);
+        const aspect = targetWidth / targetHeight;
+        if (!Number.isNaN(aspect)) {
+          this.camera.aspect = aspect;
+          this.camera.updateProjectionMatrix();
+        }
+      }
+      return;
+    }
+
+    const lerpFactor = 0.25;
+    const nextWidth = this.rendererSize.x + widthDiff * lerpFactor;
+    const nextHeight = this.rendererSize.y + heightDiff * lerpFactor;
+    const finalWidth = Math.max(1, Math.round(nextWidth));
+    const finalHeight = Math.max(1, Math.round(nextHeight));
+
+    if (finalWidth !== this.rendererSize.x || finalHeight !== this.rendererSize.y) {
+      this.renderer.setSize(finalWidth, finalHeight);
+      this.rendererSize.set(finalWidth, finalHeight);
+      const aspect = finalWidth / finalHeight;
+      if (!Number.isNaN(aspect)) {
+        this.camera.aspect = aspect;
+        this.camera.updateProjectionMatrix();
+      }
+    }
   }
 
   resetView() {
@@ -345,6 +394,7 @@ export class ThreeApp {
 
   animate = () => {
     requestAnimationFrame(this.animate);
+    this.applyPendingResize();
     this.controls.update();
     this.updates.forEach((fn) => fn());
     this.renderer.render(this.scene, this.camera);
