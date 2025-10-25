@@ -8,9 +8,22 @@ export interface SceneContext {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
-  root: THREE.Group;     // idea をぶら下げる
+  root: THREE.Group; // idea をぶら下げる
   clock: THREE.Clock;
 }
+
+type SceneTransition = (options: TransitionOptions) => Promise<void>;
+
+interface TransitionOptions {
+  app: ThreeApp;
+  currentId: string | null;
+  nextId: string | null;
+  loadNext: () => Promise<void>;
+  isMobile: boolean;
+}
+
+const easeOutQuint = (t: number) => 1 - Math.pow(1 - t, 5);
+const easeInOutQuad = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 
 export class ThreeApp {
   scene = new THREE.Scene();
@@ -26,6 +39,9 @@ export class ThreeApp {
   private fadeOverlay: HTMLElement | null = null;
   private fadeDurationMs = 450;
   private currentIdeaId: string | null = null;
+  private transitionStage: HTMLDivElement | null = null;
+  private transitions: SceneTransition[] = [];
+  private lightweightTransitions: SceneTransition[] = [];
 
   constructor(canvas: HTMLCanvasElement) {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -56,6 +72,22 @@ export class ThreeApp {
     this.scene.add(this.root);
 
     this.fadeOverlay = document.getElementById("scene-fade");
+    this.transitionStage = document.getElementById("transition-stage") as HTMLDivElement | null;
+    if (!this.transitionStage) {
+      this.transitionStage = document.createElement("div");
+      this.transitionStage.id = "transition-stage";
+      canvas.parentElement?.appendChild(this.transitionStage);
+    }
+
+    this.transitions = [
+      deepZoomFade,
+      pixelDriftTransition,
+      luminanceDissolveTransition,
+      directionalWipeTransition,
+      depthRippleTransition,
+    ];
+
+    this.lightweightTransitions = [deepZoomFade, directionalWipeTransition, simpleFadeTransition];
 
     canvas.addEventListener("pointerdown", (e) => this.onPointerDown(e));
     window.addEventListener("resize", () => this.onResize());
@@ -151,6 +183,88 @@ export class ThreeApp {
     this.glitchTimeout = window.setTimeout(() => {
       canvas.classList.remove("glitching");
     }, 180);
+  }
+
+  private prefersLightweightTransition() {
+    return innerWidth < 768 || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  }
+
+  private ensureStage() {
+    if (!this.transitionStage) {
+      this.transitionStage = document.getElementById("transition-stage") as HTMLDivElement | null;
+      if (!this.transitionStage) {
+        const stage = document.createElement("div");
+        stage.id = "transition-stage";
+        this.renderer.domElement.parentElement?.appendChild(stage);
+        this.transitionStage = stage;
+      }
+    }
+    return this.transitionStage!;
+  }
+
+  activateStage(content?: HTMLElement) {
+    const stage = this.ensureStage();
+    stage.classList.add("active");
+    stage.style.opacity = "1";
+    stage.style.transition = "";
+    stage.style.background = "";
+    if (content) stage.replaceChildren(content);
+    return stage;
+  }
+
+  clearStage() {
+    const stage = this.ensureStage();
+    stage.classList.remove("active");
+    stage.style.opacity = "";
+    stage.style.transition = "";
+    stage.style.background = "";
+    stage.replaceChildren();
+  }
+
+  waitForFrame(count = 1) {
+    return new Promise<void>((resolve) => {
+      const step = () => {
+        count -= 1;
+        if (count <= 0) {
+          resolve();
+        } else {
+          requestAnimationFrame(step);
+        }
+      };
+      requestAnimationFrame(step);
+    });
+  }
+
+  waitMs(ms: number) {
+    return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+  }
+
+  runTimeline(durationMs: number, onUpdate: (t: number, eased: number) => void, easing = easeOutQuint) {
+    return new Promise<void>((resolve) => {
+      const start = performance.now();
+      const loop = (now: number) => {
+        const elapsed = now - start;
+        const t = Math.min(1, elapsed / durationMs);
+        onUpdate(t, easing(t));
+        if (t < 1) {
+          requestAnimationFrame(loop);
+        } else {
+          resolve();
+        }
+      };
+      requestAnimationFrame(loop);
+    });
+  }
+
+  async captureFrame() {
+    await this.waitForFrame();
+    const url = this.renderer.domElement.toDataURL("image/png");
+    return url;
+  }
+
+  private pickTransition(): SceneTransition {
+    const pool = this.prefersLightweightTransition() ? this.lightweightTransitions : this.transitions;
+    return pool[Math.floor(Math.random() * pool.length)] ?? simpleFadeTransition;
   }
 
   initSolarSystem() {
@@ -260,11 +374,11 @@ export class ThreeApp {
     });
   }
 
-  private fadeToBlack() {
+  fadeToBlack() {
     return this.transitionOverlay(true);
   }
 
-  private fadeFromBlack() {
+  fadeFromBlack() {
     return this.transitionOverlay(false);
   }
 
@@ -272,35 +386,268 @@ export class ThreeApp {
     const nextId = id ?? null;
     if (nextId === this.currentIdeaId) return;
 
-    await this.fadeToBlack();
+    const transition = this.pickTransition();
 
-    if (this.cleanupIdea) {
-      this.cleanupIdea();
-      this.cleanupIdea = null;
-    }
-    this.root.clear();
-    this.currentIdeaId = null;
+    const loadNext = async () => {
+      if (this.cleanupIdea) {
+        this.cleanupIdea();
+        this.cleanupIdea = null;
+      }
+      this.root.clear();
+      this.currentIdeaId = null;
 
-    if (!id) {
-      await this.fadeFromBlack();
-      return;
-    }
+      if (!id) return;
+
+      try {
+        const mod: { default: (ctx: SceneContext) => void | (() => void) } = await import(`./ideas/${id}.ts`);
+        const maybeCleanup = mod.default({
+          scene: this.scene,
+          camera: this.camera,
+          renderer: this.renderer,
+          root: this.root,
+          clock: this.clock,
+        });
+        if (typeof maybeCleanup === "function") this.cleanupIdea = maybeCleanup;
+        this.currentIdeaId = id;
+      } catch {
+        // not found → do nothing
+      }
+    };
 
     try {
-      const mod: { default: (ctx: SceneContext) => void | (() => void) } = await import(`./ideas/${id}.ts`);
-      const maybeCleanup = mod.default({
-        scene: this.scene,
-        camera: this.camera,
-        renderer: this.renderer,
-        root: this.root,
-        clock: this.clock,
+      await transition({
+        app: this,
+        currentId: this.currentIdeaId,
+        nextId,
+        loadNext,
+        isMobile: this.prefersLightweightTransition(),
       });
-      if (typeof maybeCleanup === "function") this.cleanupIdea = maybeCleanup;
-      this.currentIdeaId = id;
-    } catch {
-      // not found → do nothing
+    } finally {
+      this.clearStage();
     }
-
-    await this.fadeFromBlack();
   }
 }
+
+const loadImage = (src: string) =>
+  new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = (event) => reject(event);
+    img.src = src;
+  });
+
+const simpleFadeTransition: SceneTransition = async ({ app, loadNext }) => {
+  await app.fadeToBlack();
+  await loadNext();
+  await app.fadeFromBlack();
+};
+
+const deepZoomFade: SceneTransition = async ({ app, loadNext }) => {
+  const stage = app.activateStage();
+  stage.style.background = "#000";
+  stage.style.opacity = "0";
+
+  const startFov = app.camera.fov;
+  const zoomIn = Math.random() > 0.5;
+  const targetFov = THREE.MathUtils.clamp(zoomIn ? startFov * 0.62 : startFov * 1.4, 24, 118);
+  const duration = 1200 + Math.random() * 600;
+
+  await app.runTimeline(duration, (_, eased) => {
+    const fov = THREE.MathUtils.lerp(startFov, targetFov, eased);
+    app.camera.fov = fov;
+    app.camera.updateProjectionMatrix();
+    stage.style.opacity = `${Math.min(1, eased * 1.2)}`;
+  }, easeOutQuint);
+
+  app.camera.fov = targetFov;
+  app.camera.updateProjectionMatrix();
+
+  await loadNext();
+  await app.waitForFrame(2);
+
+  await app.runTimeline(520, (_, eased) => {
+    const fov = THREE.MathUtils.lerp(targetFov, startFov, eased);
+    app.camera.fov = fov;
+    app.camera.updateProjectionMatrix();
+    stage.style.opacity = `${Math.max(0, 1 - eased)}`;
+  }, easeInOutQuad);
+
+  app.camera.fov = startFov;
+  app.camera.updateProjectionMatrix();
+  stage.style.transition = "opacity .35s ease-out";
+  stage.style.opacity = "0";
+  await app.waitMs(360);
+};
+
+const pixelDriftTransition: SceneTransition = async ({ app, loadNext }) => {
+  const frameUrl = await app.captureFrame();
+  const stage = app.activateStage();
+  stage.style.background = "#02010a";
+
+  const container = document.createElement("div");
+  container.className = "transition-pixel-drift";
+  stage.replaceChildren(container);
+
+  const layers = ["base", "red", "green", "blue"];
+  layers.forEach((layer) => {
+    const div = document.createElement("div");
+    div.className = `channel ${layer}`;
+    div.style.backgroundImage = `url(${frameUrl})`;
+    container.appendChild(div);
+  });
+
+  const driftX = (Math.random() - 0.5) * 44;
+  const driftY = (Math.random() - 0.5) * 36;
+  const driftSkew = (Math.random() - 0.5) * 12;
+  const duration = 0.62 + Math.random() * 0.18;
+  container.style.setProperty("--drift-x", `${driftX}px`);
+  container.style.setProperty("--drift-y", `${driftY}px`);
+  container.style.setProperty("--drift-skew", `${driftSkew}deg`);
+  container.style.setProperty("--drift-duration", `${duration}s`);
+
+  const baseLayer = container.querySelector(".channel.base");
+  await new Promise<void>((resolve) => {
+    if (!baseLayer) {
+      resolve();
+      return;
+    }
+    baseLayer.addEventListener("animationend", () => resolve(), { once: true });
+  });
+
+  container.style.transition = "opacity .24s ease-out";
+  container.style.opacity = "0";
+  await app.waitMs(260);
+
+  await loadNext();
+  stage.style.transition = "opacity .4s ease-out";
+  stage.style.opacity = "0";
+  await app.waitMs(420);
+};
+
+const luminanceDissolveTransition: SceneTransition = async (options) => {
+  const { app, loadNext } = options;
+  const frameUrl = await app.captureFrame();
+  const stage = app.activateStage();
+  stage.style.background = "#000";
+
+  const container = document.createElement("div");
+  container.className = "transition-luminance";
+  const canvas = document.createElement("canvas");
+  container.appendChild(canvas);
+  stage.replaceChildren(container);
+
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) {
+    await simpleFadeTransition(options);
+    return;
+  }
+
+  const img = await loadImage(frameUrl);
+  const maxDim = Math.max(img.width, img.height, 1);
+  const limitScale = Math.min(1, 1280 / maxDim);
+  const fitScale = Math.min(innerWidth / Math.max(img.width, 1), innerHeight / Math.max(img.height, 1), 1);
+  const scale = Math.max(0.2, Math.min(limitScale, fitScale));
+  canvas.width = Math.max(4, Math.round(img.width * scale));
+  canvas.height = Math.max(4, Math.round(img.height * scale));
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+  const sourceData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const working = ctx.createImageData(canvas.width, canvas.height);
+  const brightness = new Float32Array(canvas.width * canvas.height);
+  for (let i = 0; i < brightness.length; i += 1) {
+    const idx = i * 4;
+    const r = sourceData.data[idx];
+    const g = sourceData.data[idx + 1];
+    const b = sourceData.data[idx + 2];
+    brightness[i] = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  }
+
+  await app.runTimeline(1200, (t, eased) => {
+    const threshold = eased;
+    const data = working.data;
+    for (let i = 0; i < brightness.length; i += 1) {
+      const idx = i * 4;
+      const bright = brightness[i];
+      const fade = Math.pow(Math.max(0, 1 - (threshold * 1.25 + bright * 0.85)), 1.6);
+      const glow = Math.min(1, bright * 1.2 + threshold * 0.6);
+      data[idx] = sourceData.data[idx] * fade + 220 * (1 - fade) * glow;
+      data[idx + 1] = sourceData.data[idx + 1] * fade + 220 * (1 - fade) * glow;
+      data[idx + 2] = sourceData.data[idx + 2] * fade + 255 * (1 - fade) * glow;
+      data[idx + 3] = Math.max(0, Math.min(255, fade * 255));
+    }
+    ctx.putImageData(working, 0, 0);
+  }, easeInOutQuad);
+
+  container.style.transition = "opacity .28s ease-out";
+  container.style.opacity = "0";
+  await app.waitMs(300);
+
+  await loadNext();
+  stage.style.transition = "opacity .45s ease-out";
+  stage.style.opacity = "0";
+  await app.waitMs(460);
+};
+
+const directionalWipeTransition: SceneTransition = async ({ app, loadNext }) => {
+  const beforeUrl = await app.captureFrame();
+  const stage = app.activateStage();
+  stage.style.background = "#010005";
+
+  const container = document.createElement("div");
+  container.className = "transition-directional";
+  const beforeFrame = document.createElement("div");
+  beforeFrame.className = "frame before";
+  beforeFrame.style.backgroundImage = `url(${beforeUrl})`;
+  container.appendChild(beforeFrame);
+  stage.replaceChildren(container);
+
+  await loadNext();
+  await app.waitForFrame(2);
+  const afterUrl = await app.captureFrame();
+  const afterFrame = document.createElement("div");
+  afterFrame.className = "frame after";
+  afterFrame.style.backgroundImage = `url(${afterUrl})`;
+  container.appendChild(afterFrame);
+
+  const directions = ["left", "right", "up", "down", "diagonal"] as const;
+  const direction = directions[Math.floor(Math.random() * directions.length)];
+  container.classList.add(`direction-${direction}`, "play");
+
+  await new Promise<void>((resolve) => {
+    afterFrame.addEventListener("animationend", () => resolve(), { once: true });
+  });
+
+  stage.style.transition = "opacity .38s ease-out";
+  stage.style.opacity = "0";
+  await app.waitMs(420);
+};
+
+const depthRippleTransition: SceneTransition = async ({ app, loadNext }) => {
+  const frameUrl = await app.captureFrame();
+  const stage = app.activateStage();
+  stage.style.background = "#000";
+
+  const container = document.createElement("div");
+  container.className = "transition-depth";
+  const frame = document.createElement("div");
+  frame.className = "frame";
+  frame.style.backgroundImage = `url(${frameUrl})`;
+  container.appendChild(frame);
+  stage.replaceChildren(container);
+
+  const centerX = 25 + Math.random() * 50;
+  const centerY = 25 + Math.random() * 50;
+  container.style.setProperty("--ripple-x", `${centerX}%`);
+  container.style.setProperty("--ripple-y", `${centerY}%`);
+
+  await app.waitMs(880);
+  await loadNext();
+
+  await new Promise<void>((resolve) => {
+    frame.addEventListener("animationend", () => resolve(), { once: true });
+  });
+
+  stage.style.transition = "opacity .45s ease-out";
+  stage.style.opacity = "0";
+  await app.waitMs(460);
+};
