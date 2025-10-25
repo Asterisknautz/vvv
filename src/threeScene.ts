@@ -23,6 +23,9 @@ export class ThreeApp {
   root = new THREE.Group();
   clock = new THREE.Clock();
   cleanupIdea: (() => void) | null = null;
+  private fadeOverlay: HTMLElement | null = null;
+  private fadeDurationMs = 450;
+  private currentIdeaId: string | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -51,6 +54,8 @@ export class ThreeApp {
     this.initSolarSystem();
 
     this.scene.add(this.root);
+
+    this.fadeOverlay = document.getElementById("scene-fade");
 
     canvas.addEventListener("pointerdown", (e) => this.onPointerDown(e));
     window.addEventListener("resize", () => this.onResize());
@@ -231,11 +236,55 @@ export class ThreeApp {
     this.renderer.render(this.scene, this.camera);
   };
 
-  async loadIdea(id?: string) {
-    if (this.cleanupIdea) { this.cleanupIdea(); this.cleanupIdea = null; }
-    this.root.clear();
+  private transitionOverlay(visible: boolean) {
+    const overlay = this.fadeOverlay;
+    if (!overlay) return Promise.resolve();
 
-    if (!id) return;
+    if (overlay.classList.contains("visible") === visible) return Promise.resolve();
+
+    return new Promise<void>((resolve) => {
+      const cleanup = () => {
+        overlay.removeEventListener("transitionend", onEnd);
+        window.clearTimeout(timeoutId);
+        resolve();
+      };
+      const onEnd = (event: TransitionEvent) => {
+        if (event.target === overlay && event.propertyName === "opacity") {
+          cleanup();
+        }
+      };
+      const timeoutId = window.setTimeout(cleanup, this.fadeDurationMs + 50);
+      overlay.addEventListener("transitionend", onEnd);
+      void overlay.offsetWidth;
+      overlay.classList.toggle("visible", visible);
+    });
+  }
+
+  private fadeToBlack() {
+    return this.transitionOverlay(true);
+  }
+
+  private fadeFromBlack() {
+    return this.transitionOverlay(false);
+  }
+
+  async loadIdea(id?: string) {
+    const nextId = id ?? null;
+    if (nextId === this.currentIdeaId) return;
+
+    await this.fadeToBlack();
+
+    if (this.cleanupIdea) {
+      this.cleanupIdea();
+      this.cleanupIdea = null;
+    }
+    this.root.clear();
+    this.currentIdeaId = null;
+
+    if (!id) {
+      await this.fadeFromBlack();
+      return;
+    }
 
     try {
       const mod: { default: (ctx: SceneContext) => void | (() => void) } = await import(`./ideas/${id}.ts`);
@@ -247,8 +296,11 @@ export class ThreeApp {
         clock: this.clock,
       });
       if (typeof maybeCleanup === "function") this.cleanupIdea = maybeCleanup;
+      this.currentIdeaId = id;
     } catch {
       // not found → do nothing
     }
+
+    await this.fadeFromBlack();
   }
 }

@@ -12,6 +12,17 @@ body{ background:var(--bg); color:var(--fg); font-family: ui-sans-serif, system-
   will-change: transform, filter;
 }
 
+#scene-fade{
+  position:fixed; inset:0;
+  background:#000;
+  opacity:0;
+  pointer-events:none;
+  transition: opacity .45s ease;
+  z-index:20;
+}
+
+#scene-fade.visible{ opacity:1; }
+
 #three-canvas.glitching{
   transform: translate(var(--glitch-translate-x, 0px), var(--glitch-translate-y, 0px)) skewX(var(--glitch-skew, 0deg));
   filter: saturate(1.2) contrast(1.08);
