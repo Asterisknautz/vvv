@@ -1,4 +1,4 @@
-// src/ideas/003.ts
+// src/ideas/002.ts
 import * as THREE from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
@@ -20,7 +20,7 @@ type Bird = {
 
 const MODE_ORDER: Mode[] = ["cinematic", "wireframe", "depth"];
 
-export default function idea003({ scene, camera, renderer, root, clock }: SceneContext) {
+export default function idea002({ scene, camera, renderer, root, clock }: SceneContext) {
   const ideaRoot = new THREE.Group();
   root.add(ideaRoot);
 
