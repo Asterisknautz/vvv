@@ -354,3 +354,8 @@ export const idea005Blueprint: Idea005Blueprint = {
 export type Idea005BlueprintExport = typeof idea005Blueprint;
 
 export type Idea005Context = SceneContext;
+
+export default function idea005(_: SceneContext) {
+  console.info("idea005 is a design-only blueprint; implement rendering logic separately.");
+  return () => {};
+}
