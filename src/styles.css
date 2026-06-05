@@ -1,7 +1,7 @@
 :root{
-  --bg:#191925;
+  --bg:#141821;
   --fg:#e6e6f6;
-  --sub:#9aa3ff;
+  --sub:#86d7ff;
 }
 *{ box-sizing:border-box; }
 html,body,#app{ height:100%; margin:0; }
@@ -95,7 +95,7 @@ body{ background:var(--bg); color:var(--fg); font-family: ui-sans-serif, system-
 
 .ui{
   position:fixed; top:24px; right:24px; display:flex; gap:12px;
-  background:rgba(255,255,255,.05); backdrop-filter: blur(6px);
+  background:rgba(134,215,255,.08); backdrop-filter: blur(6px);
   padding:8px 10px; border-radius:10px;
 }
 .ui a{
