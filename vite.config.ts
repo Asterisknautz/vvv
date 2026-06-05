@@ -4,7 +4,7 @@ import { visualizer } from "rollup-plugin-visualizer";
 export default defineConfig({
   plugins: [
     visualizer({
-      filename: "stats.html",
+      filename: "reports/build/bundle-stats.html",
       open: false,
       gzipSize: true,
       brotliSize: true,
